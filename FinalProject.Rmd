@@ -1,5 +1,5 @@
 ---
-title: "How NBA players performance relates to their experience"
+title: "Estimating the shooting efficiency of top NBA point guard"
 author: "Xiang Gao, Jerome Finn, Nilesh Malpekar"
 date: "2017/12/03"
 output: html_document
