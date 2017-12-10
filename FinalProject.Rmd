@@ -1,9 +1,51 @@
 ---
-title: "project"
-author: "Xiang Gao"
-date: "2017年12月3日"
+title: "How NBA players performance relates to their experience"
+author: "Xiang Gao, Jerome Finn, Nilesh Malpekar"
+date: "2017/12/03"
 output: html_document
 ---
+<style type="text/css">
+
+body{ /* Normal  */
+      font-size: 12px;
+  }
+td {  /* Table  */
+  font-size: 8px;
+}
+h1.title {
+  font-size: 38px;
+  color: DarkRed;
+}
+h1 { /* Header 1 */
+  font-size: 28px;
+  color: DarkBlue;
+}
+h2 { /* Header 2 */
+    font-size: 22px;
+  color: DarkBlue;
+}
+h3 { /* Header 3 */
+  font-size: 18px;
+  font-family: "Times New Roman", Times, serif;
+  color: DarkBlue;
+}
+code.r{ /* Code block */
+    font-size: 12px;
+}
+pre { /* Code block - determines code spacing between lines */
+    font-size: 14px;
+}
+</style>
+
+# Purpose
+# Data
+# Model
+# Computation
+# Model Assessment 
+# Results
+# Contributions
+# References
+# Appendix
 
 Topic:Estimating the shooting efficiency of top NBA point guard.
 
@@ -11,10 +53,10 @@ Background: As we all know,a point guard controll the court by passing the ball 
 
 I am using logistic regression to assess the probablity of shooting, also use a binomial model to estimate FGM. In order to build a hierachical model, each player is treated as a individual group by introducing a random effect called player effect. What's more, recent three years data will be used to check the continuous improvement.
 
-```{r}
-install.packages('readxl')
-install.packages('UsingR')
-install.packages('Hmisc')
+```{r setup, include=FALSE}
+#install.packages('readxl')
+#install.packages('UsingR')
+#install.packages('Hmisc')
 ```
 
 data cleaning. 
