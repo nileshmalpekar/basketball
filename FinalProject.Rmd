@@ -36,36 +36,49 @@ pre { /* Code block - determines code spacing between lines */
     font-size: 14px;
 }
 </style>
+```{r,  echo = FALSE, eval = FALSE}
+install.packages("gridExtra")
+```
+
+```{r}
+library(rjags)
+library(coda)
+library(lattice)
+library(gridExtra)
+```
 
 # Purpose
+
+## Background 
+
+As we all know,a point guard controll the court by passing the ball to the player who is wide open. He is a decision maker to deliver assists or finish the attack by himself. The question arises, who has the highest shooting percentage among the top NBA point guards. Is this related to the professional years of experience.
+
+We are using logistic regression to assess the probablity of shooting, also use a binomial model to estimate FGM. In order to build a hierachical model, each player is treated as a individual group by introducing a random effect called player effect. What's more, recent three years data will be used to check the continuous improvement.
+
 # Data
-# Model
-# Computation
-# Model Assessment 
-# Results
-# Contributions
-# References
-# Appendix
 
-Topic:Estimating the shooting efficiency of top NBA point guard.
+8 rows with one row per player
 
-Background: As we all know,a point guard controll the court by passing the ball to the player who is wide open. He is a decision maker to deliver assists or finish the attack by himself. The question arises, who has the highest shooting percentage among the top NBA point guards. Is this related to the professional years of experience.
+FGM_year_ : Field Goals Made for the given _year_
+FGA_year : Field Goals Attempted for the given _year_
+Yr_Exper_year : Years of Experience for the given _year_
 
-I am using logistic regression to assess the probablity of shooting, also use a binomial model to estimate FGM. In order to build a hierachical model, each player is treated as a individual group by introducing a random effect called player effect. What's more, recent three years data will be used to check the continuous improvement.
-
-```{r setup, include=FALSE}
-#install.packages('readxl')
-#install.packages('UsingR')
-#install.packages('Hmisc')
-```
-
-data cleaning. 
 ```{r}
-library(readxl)
-data <- read_excel('data_NBAstats.xlsx')
-data <- as.data.frame(data)
-data
+data <- read.table("data_NBAstats.csv", header=TRUE, sep = ",")
+data[, c("names", "FGM_2017", "FGA_2017", "Yr_Exper_2017", "FGM_2016", "FGA_2016", "Yr_Exper_2016", "FGM_2015", "FGA_2015", "Yr_Exper_2015")]
 ```
+
+## Additional fields creation
+
+Probabilities derived from the current observation as $prob_{year} = FGM_{year}/FGA_{year}$
+
+```{r}
+data$Prob_2017 <- data$FGM_2017 / data$FGA_2017
+data$Prob_2016 <- data$FGM_2016 / data$FGA_2016
+data$Prob_2015 <- data$FGM_2015 / data$FGA_2015
+```
+
+# Model
 
 JAGS model. I will use scaled-t1 on coefficients in beta. and a flat uniform distribution for sigma of player effect
 ```{r,eval=F}
@@ -74,312 +87,275 @@ data {
   dimY <- dim(FGM)
 }
 model {
-  for (i in 1:dimY[1]) { ## row
-    for (j in 1:dimY[2]) { ## column
+  for (i in 1:dimY[1]) { ## row per player; total 8 players
+    
+    for (j in 1:dimY[2]) { ## column per year; total 3 years i.e. 2017, 2016, 2015
       
-      FGM[i,j] ~ dbin(prob[i,j],FGA[i,j])
+      FGM[i,j] ~ dbin(prob[i,j], FGA[i,j])
+      
       logit(prob[i,j]) <- beta.Year[i]*Yr.Exper[i,j]+Player.Effect[i]
-	  
 	  
       FGMrep[i,j] ~ dbin(prob[i,j],FGA[i,j])
     }
     
 
       beta.Year[i] ~ dt(0,0.16,1)
+      
       Player.Effect[i] ~ dnorm(mu, 1/sigmaPE^2)
   }
 
-  sigmaPE ~ dunif(0,100)
   mu ~ dt(0,0.01,1)
+
+  sigmaPE ~ dunif(0,100)
 
 }
 ```
 
+
+## Prepare data binding
+
 Subset out the FGM(field goal made),FGA(field goal attempt),Yr.Exper(Years of professional experience)
+
 ```{r}
-d1 <- list(FGM = data[,c(2,7,12)],
-           FGA = data[,c(3,8,13)],
-           Yr.Exper = data[,c(6,11,16)])
+d1 <- list(FGM = data[,c("FGM_2017","FGM_2016","FGM_2015")],
+           FGA = data[,c("FGA_2017","FGA_2016","FGA_2015")],
+           Yr.Exper = data[,c("Yr_Exper_2017","Yr_Exper_2016","Yr_Exper_2015")])
 
 ```
 
-Initialization of 4 chains
-```{r}
-inits1 <- list(list(beta.Year=c(-10,-10,-10,-10,-10,-10,-10,-10),mu=10, sigmaPE=0.001),
-               list(beta.Year=c(-10,-10,-10,-10,-10,-10,-10,-10),mu=-10,sigmaPE=99),
-               list(beta.Year=c(-10,-10,-10,-10,-10,-10,-10,-10),mu=10,sigmaPE=99),
-               list(beta.Year=c(-10,-10,-10,-10,-10,-10,-10,-10),mu=-10,sigmaPE=0.01))
-```
+## Initialization of chains
 
 ```{r}
-inits1 <- list(list(beta.Year=c(-3,-3,-3,-3,-3,-3,-3,-3),mu=10, sigmaPE=0.001),
-               list(beta.Year=c(-3,-3,-3,-3,-3,-3,-3,-3),mu=-10,sigmaPE=99),
-               list(beta.Year=c(-3,-3,-3,-3,-3,-3,-3,-3),mu=10,sigmaPE=99),
-               list(beta.Year=c(-3,-3,-3,-3,-3,-3,-3,-3),mu=-10,sigmaPE=0.01))
-```
-
-```{r}
-## tuning the model
 inits1 <- list(list(beta.Year=c(-1,-1,-1,-1,-1,-1,-1,-1),mu=10, sigmaPE=0.001),
                list(beta.Year=c(-1,-1,-1,-1,-1,-1,-1,-1),mu=-10,sigmaPE=99),
                list(beta.Year=c(-1,-1,-1,-1,-1,-1,-1,-1),mu=10,sigmaPE=99),
                list(beta.Year=c(-1,-1,-1,-1,-1,-1,-1,-1),mu=-10,sigmaPE=0.01))
 ```
-build model
-```{r}
-library(rjags)
-m1 <- jags.model('model-logistic.bug',d1,inits1,n.chains = 4,n.adapt = 1000)
-```
 
-Burning and check convergence
-```{r}
-update(m1,250000)
-
-x1 <- coda.samples(m1,c('beta.Year','Player.Effect'), n.iter = 10000)
-
-gelman.diag(x1,autoburnin = F)
-```
-
+## Build model
 
 ```{r}
-x1 <- coda.samples(m1,c('beta.Year','Player.Effect','prob','FGMrep'), n.iter=100000)
+m1 <- jags.model('model-logistic.bug', d1, inits = inits1, n.chains = 4, n.adapt = 1000)
 ```
 
+## Burning and check convergence
+
+```{r}
+update(m1, 1024000)
+```
+
+## Posterior samples
+
+```{r}
+x1 <- coda.samples(m1,c('beta.Year','Player.Effect'), n.iter = 40000)
+
+gelman.diag(x1, autoburnin = F)
+```
+
+## Effective samples sizes are adequate.
 
 ```{r}
 effectiveSize(x1)
 ```
 
-Effective samples sizes are adequate.
 
 
-Check overdispersion, chi-square discrepancy
+# Computation
+
+## Retrieve replicate dataset and probabilities
+
+```{r}
+x1 <- coda.samples(m1, c('beta.Year','Player.Effect','prob','FGMrep'), n.iter = 40000)
+```
+
+## Check overdispersion, chi-square discrepancy
 
 ```{r}
 df <- as.matrix(x1)
-probs1 <- df[,paste('prob[',1:8, ',',1,']',sep='')]
-probs2 <- df[,paste('prob[',1:8, ',',2,']',sep='')]
-probs3 <- df[,paste('prob[',1:8, ',',3,']',sep='')]
+probs1 <- df[,paste('prob[',1:8, ',',1,']',sep='')] # 2017
+probs2 <- df[,paste('prob[',1:8, ',',2,']',sep='')] # 2016
+probs3 <- df[,paste('prob[',1:8, ',',3,']',sep='')] # 2015
 probs <-  cbind(probs1,probs2,probs3)
 
-FGMrep1 <- df[,paste('FGMrep[',1:8, ',',1,']',sep='')]
-FGMrep2 <- df[,paste('FGMrep[',1:8, ',',2,']',sep='')]
-FGMrep3 <- df[,paste('FGMrep[',1:8, ',',3,']',sep='')]
+FGMrep1 <- df[,paste('FGMrep[',1:8, ',',1,']',sep='')] # 2017
+FGMrep2 <- df[,paste('FGMrep[',1:8, ',',2,']',sep='')] # 2016
+FGMrep3 <- df[,paste('FGMrep[',1:8, ',',3,']',sep='')] # 2015
 FGMrep <-  cbind(FGMrep1,FGMrep2,FGMrep3)
 
 FGM.v <- unlist(d1$FGM)
 FGA.v <- unlist(d1$FGA)
 ```
 
-Chi-square
+
 ```{r}
 
-Tchi <- matrix(NA,nrow(FGMrep),24)
-Tchirep <- matrix(NA,nrow(FGMrep),24)
+Tchi <- matrix(NA, nrow(FGMrep), 24)
+Tchirep <- matrix(NA, nrow(FGMrep), 24)
+
 for (s in 1:nrow(FGMrep)){
-        Tchi[s,] <- sum((FGM.v - FGA.v*probs[s,])^2/(FGA.v*probs[s,]*(1-probs[s,])))
-        Tchirep[s,] <- sum((FGMrep[s,] - FGA.v*probs[s,])^2/(FGA.v*probs[s,]*(1-probs[s,])))
+        Tchi[s,] <- sum( (FGM.v - FGA.v * probs[s,])^2 / (FGA.v * probs[s,] * (1-probs[s,])) )
+        Tchirep[s,] <- sum( (FGMrep[s,] - FGA.v * probs[s,])^2 / (FGA.v * probs[s,] * (1-probs[s,])) )
 }
 ```
 
 ```{r}
 mean(Tchirep>=Tchi)
 ```
+
 No over dispersion problem
 
-Check Stephen Curry successfully makes an attempted field goal for the past three years.
+# Model Assessment 
 
 ```{r}
 ilogit <-  function(x) 1/(1+exp(-x))
-beta.Year.SC <- df[,'beta.Year[2]']
-player.Effect.SC <- df[,'Player.Effect[2]']
 
-newprob.SC17 <- numeric(nrow(probs1))
-for (s in 1:nrow(probs1)) {
-  newprob.SC17[s] <- ilogit(beta.Year.SC[s]*8+player.Effect.SC[s])
+get_player_posterior_probs <- function(player_row_id) {
+  beta.Year <- df[,paste('beta.Year[', player_row_id, ']', sep = '')]
+  player.Effect <- df[,paste('Player.Effect[', player_row_id, ']', sep = '')]
+  
+  posterior_2017 <- numeric(nrow(probs1))
+  posterior_2016 <- numeric(nrow(probs1))
+  posterior_2015 <- numeric(nrow(probs1))
+  
+  for (s in 1:nrow(probs1)) {
+    posterior_2017[s] <- ilogit(beta.Year[s] * data[player_row_id, "Yr_Exper_2017"] + player.Effect[s])
+    posterior_2016[s] <- ilogit(beta.Year[s] * data[player_row_id, "Yr_Exper_2016"] + player.Effect[s])
+    posterior_2015[s] <- ilogit(beta.Year[s] * data[player_row_id, "Yr_Exper_2015"] + player.Effect[s])
+  }
+  posterior <- cbind(posterior_2017,posterior_2016,posterior_2015)
+  
+  return(posterior)
+}
+
+get_player_posterior_vs_observed <- function(player_row_id, posterior) {
+  posterior_means <- apply(posterior, 2, mean)
+
+  df_compare <- data.frame(posterior = as.vector(posterior_means), 
+                             observed = as.vector(as.matrix(data[player_row_id, c("Prob_2017", "Prob_2016", "Prob_2015")])))
+  rownames(df_compare) <- c("2017", "2016", "2015")
+
+  return (df_compare)
+}
+plot_player_posterior_probs <- function(player_row_id, posterior) {
+  plot1 <- densityplot(posterior[,"posterior_2017"],
+            panel = function(x, ...) {
+             panel.densityplot(x, ...)
+              panel.abline(v = mean(x), col.line = "blue")
+              panel.abline(v = data[player_row_id, "Prob_2017"], col.line = "red")
+            },
+            xlab = "Posterior probability 2017"
+            )
+  plot2 <- densityplot(posterior[,"posterior_2016"],
+            panel = function(x, ...) {
+             panel.densityplot(x, ...)
+              panel.abline(v = mean(x), col.line = "blue")
+              panel.abline(v = data[player_row_id, "Prob_2016"], col.line = "red")
+            },
+            xlab = "Posterior probability 2016"
+            )
+  plot3 <- densityplot(posterior[,"posterior_2015"],
+            panel = function(x, ...) {
+             panel.densityplot(x, ...)
+              panel.abline(v = mean(x), col.line = "blue")
+              panel.abline(v = data[player_row_id, "Prob_2015"], col.line = "red")
+            },
+            xlab = "Posterior probability 2015"
+            )
+  
+  grid.arrange(plot1, plot2, plot3, ncol = 3, nrow = 1)
 }
 ```
 
+## Check Stephen Curry successfully makes an attempted field goal for the past three years.
+
 ```{r}
-newprob.SC16 <- numeric(nrow(probs1))
-for (s in 1:nrow(probs1)) {
-  newprob.SC16[s] <- ilogit(beta.Year.SC[s]*7+player.Effect.SC[s])
-}
+player_row_id <- which(data$name == "Stephen Curry")
+# posterior prob
+posterior <- get_player_posterior_probs(player_row_id)
 ```
 
 ```{r}
-newprob.SC15 <- numeric(nrow(probs1))
-for (s in 1:nrow(probs1)) {
-  newprob.SC15[s] <- ilogit(beta.Year.SC[s]*6+player.Effect.SC[s])
-}
-
-newprob.SC <- cbind(newprob.SC15,newprob.SC16,newprob.SC17)
-```
-
-density plot from 2015 to 2017
-
-```{r}
-library(UsingR)
-densityplot(newprob.SC[,3])
-```
-
-```{r}
-densityplot(newprob.SC[,2])
-
-```
-
-
-```{r}
-densityplot(newprob.SC[,1])
-
+df_posterior_observed <- get_player_posterior_vs_observed(player_row_id, posterior)
+df_posterior_observed
 ```
 
 The posterior density does not show Stephen's improvement of making a field goal, let's also check Russell Westbrook.
 
 ```{r}
-beta.Year.Rw <- df[,'beta.Year[1]']
-player.Effect.Rw <- df[,'Player.Effect[1]']
+plot_player_posterior_probs(player_row_id, posterior)
+```
 
-newprob.Rw17 <- numeric(nrow(probs1))
-for (s in 1:nrow(probs1)) {
-  newprob.Rw17[s] <- ilogit(beta.Year.Rw[s]*9+player.Effect.Rw[s])
-}
-densityplot(newprob.Rw17)
+## Check James Harden successfully makes an attempted field goal for the past three years.
+
+```{r}
+player_row_id <- which(data$name == "James Harden")
+# posterior prob
+posterior <- get_player_posterior_probs(player_row_id)
 ```
 
 ```{r}
-newprob.Rw16 <- numeric(nrow(probs1))
-for (s in 1:nrow(probs1)) {
-  newprob.Rw16[s] <- ilogit(beta.Year.Rw[s]*8+player.Effect.Rw[s])
-}
-densityplot(newprob.Rw16)
-```
-
-
-```{r}
-newprob.Rw15 <- numeric(nrow(probs1))
-for (s in 1:nrow(probs1)) {
-  newprob.Rw15[s] <- ilogit(beta.Year.Rw[s]*7+player.Effect.Rw[s])
-}
-densityplot(newprob.Rw15)
-```
-Not much improvement either. Let's check Kyrie Irving.
-
-```{r}
-beta.Year.KI <- df[,'beta.Year[4]']
-player.Effect.KI <- df[,'Player.Effect[4]']
-
-newprob.KI17 <- numeric(nrow(probs1))
-for (s in 1:nrow(probs1)) {
-  newprob.KI17[s] <- ilogit(beta.Year.KI[s]*6+player.Effect.KI[s])
-}
-densityplot(newprob.KI17)
+df_posterior_observed <- get_player_posterior_vs_observed(player_row_id, posterior)
+df_posterior_observed
 ```
 
 ```{r}
-newprob.KI16 <- numeric(nrow(probs1))
-for (s in 1:nrow(probs1)) {
-  newprob.KI16[s] <- ilogit(beta.Year.KI[s]*5+player.Effect.KI[s])
-}
-densityplot(newprob.KI16)
+plot_player_posterior_probs(player_row_id, posterior)
 ```
 
+## Check Giannis Antetolounmpo successfully makes an attempted field goal for the past three years.
 
 ```{r}
-newprob.KI15 <- numeric(nrow(probs1))
-for (s in 1:nrow(probs1)) {
-  newprob.KI15[s] <- ilogit(beta.Year.KI[s]*4+player.Effect.KI[s])
-}
-densityplot(newprob.KI15)
-```
-Kyrie shows about one percent improvement
-
-Let's check Giannis Antetolounmpo
-```{r}
-beta.Year.GA <- df[,'beta.Year[7]']
-player.Effect.GA <- df[,'Player.Effect[7]']
-
-newprob.GA17 <- numeric(nrow(probs1))
-for (s in 1:nrow(probs1)) {
-  newprob.GA17[s] <- ilogit(beta.Year.GA[s]*4+player.Effect.GA[s])
-}
-densityplot(newprob.GA17)
+player_row_id <- which(data$name == "Giannis Antetolounmpo")
+# posterior prob
+posterior <- get_player_posterior_probs(player_row_id)
 ```
 
 ```{r}
-newprob.GA16 <- numeric(nrow(probs1))
-for (s in 1:nrow(probs1)) {
-  newprob.GA16[s] <- ilogit(beta.Year.GA[s]*3+player.Effect.GA[s])
-}
-densityplot(newprob.GA16)
-```
-
-
-```{r}
-newprob.GA15 <- numeric(nrow(probs1))
-for (s in 1:nrow(probs1)) {
-  newprob.GA15[s] <- ilogit(beta.Year.GA[s]*2+player.Effect.GA[s])
-}
-densityplot(newprob.GA15)
-```
-Giannis shows great improvement from 48% to 52%, even with only a couple of years experience
-
-I am also interested in player effect. I want to see comparison of the posterior probability of player effect.
-
-The player effect of Russell bigger than Stephen.
-```{r}
-mean(df[,'Player.Effect[1]']>df[,'Player.Effect[2]'])
-
-```
-Stephen > James Harden
-```{r}
-mean(df[,'Player.Effect[2]']>df[,'Player.Effect[3]'])
-```
-
-Stephen > Kyrie Irving
-```{r}
-mean(df[,'Player.Effect[2]']>df[,'Player.Effect[4]'])
-```
-
-Stephen > Giannis
-
-```{r}
-mean(df[,'Player.Effect[1]']>df[,'Player.Effect[7]'])
-```
-There is evidence that Giannis has the biggest player impact.
-
-This project shows that the shooting accuracy doesn't have a strong relationship with years of  professional experience. The player's personal effect is still the major impact. This is related to the basketball DNA that guided the player to make a better decision not to pass but taking over and make an attempted basket.
-On the other hand, a point guard is not easily trained for making a good decision.
-
-check marginal posterior predictive p-value of (FGMrep[i]>y[i])
-
-```{r}
-FGM.p17 <- numeric(8)
-for (s in 1:8) {
-  FGM.p17[s] <- mean(FGMrep1[,s]>=d1$FGM[s,1])     
-}
-
+df_posterior_observed <- get_player_posterior_vs_observed(player_row_id, posterior)
+df_posterior_observed
 ```
 
 ```{r}
-FGM.p16 <- numeric(8)
-for (s in 1:8) {
-  FGM.p16[s] <- mean(FGMrep2[,s]>=d1$FGM[s,2])     
-}
+plot_player_posterior_probs(player_row_id, posterior)
+```
 
+## Check Russell Westbrook successfully makes an attempted field goal for the past three years.
+
+```{r}
+player_row_id <- which(data$name == "Russell Westbrook")
+# posterior prob
+posterior <- get_player_posterior_probs(player_row_id)
 ```
 
 ```{r}
-FGM.p15 <- numeric(8)
-for (s in 1:8) {
-  FGM.p15[s] <- mean(FGMrep3[,s]>=d1$FGM[s,3])     
-}
-
+df_posterior_observed <- get_player_posterior_vs_observed(player_row_id, posterior)
+df_posterior_observed
 ```
 
-table
 ```{r}
-FGM.p <- data.frame(data[,1],FGM.p17,FGM.p16,FGM.p15)
-FGM.p
+plot_player_posterior_probs(player_row_id, posterior)
 ```
+
+## Check Kyrie Irving successfully makes an attempted field goal for the past three years.
+
+```{r}
+player_row_id <- which(data$name == "Kyrie Irving")
+# posterior prob
+posterior <- get_player_posterior_probs(player_row_id)
+```
+
+```{r}
+df_posterior_observed <- get_player_posterior_vs_observed(player_row_id, posterior)
+df_posterior_observed
+```
+
+```{r}
+plot_player_posterior_probs(player_row_id, posterior)
+```
+
+# Results
+# Contributions
+# References
+# Appendix
+
 
