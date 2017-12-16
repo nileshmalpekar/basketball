@@ -2,7 +2,9 @@
 title: "Estimating the shooting efficiency of top NBA point guard"
 author: "Xiang Gao, Jerome Finn, Nilesh Malpekar"
 date: "2017/12/03"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 <style type="text/css">
 
@@ -64,6 +66,8 @@ We are using logistic regression to assess the probablity of shooting, also use 
 ## Original data
 
 Original data is retrieved from Kaggle competition site [NBA Dataset](https://www.kaggle.com/drgilermo/nba-players-stats/downloads/nba-players-stats-since-1950.zip)
+
+Using our homework datasets as a guide, Xiang got our data set to manageable level for our questions. We concentrate on players and years with players representing groups similar to how rats where used as groups in our previous lectures. 
 
 The zip file contains two separate CSV files
 * Seasons_Stats.csv - season specific data since 1950
@@ -265,7 +269,27 @@ ggplot(data = model_data_long, aes(x=Year, y=FG)) + geom_line(aes(colour=Player)
 ```
 
 # Model
+  
+    
+## Notation  
 
+\begin{center}
+
+$y_{ji}$ = Shooting rate of player *i* at year *j* 
+$x_1$ = 2017, $x_2$ = 2016, $x_3$ = 2015  
+  
+$y_i$ | $\beta$, $X_i$ ~ indep. Bin($n_i$, $p_i$)  
+logit($p_i$) = $X_i$$\beta$ + $\epsilon_i$, $\epsilon_i$ ~ iid
+N(0, $\sigma_{\epsilon}^2$), Inv-$\chi^2$($\nu_i$, $s_{j}^2$) 
+
+\end{center}
+  
+## DAG Model  
+  
+  
+![I represents the players(groups) and J the years](DAG_epsilon.jpg)
+ 
+## Code  
 JAGS model. I will use scaled-t1 on coefficients in beta. and a flat uniform distribution for sigma of player effect
 ```{r,eval=F}
 
@@ -316,25 +340,35 @@ inits1 <- list(list(beta.Year=rep(-1, model_data_row_count), mu=10, sigmaPE=0.00
 
 
 ## Build model
-
+  
 ```{r, message=FALSE, warning=FALSE}
 m1 <- jags.model('model-logistic.bug', d1, inits = inits1, n.chains = 4, n.adapt = 1000)
 ```
 
 ## Burning and check convergence
 
+We tried various values for to speed convergence. None lead to very fast convergence but the above values, after much trial and error, were finally acceptable. Still it took a burn-in of over 1 million iterations to get convergence.
+
 ```{r, message=FALSE, warning=FALSE}
 update(m1, 1024000)
 ```
 
-## Posterior samples
+```{r, eval=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
+#update(m1, 1000)
+```
 
-```{r, message=FALSE, warning=FALSE}
+## Posterior samples and Gelman Statistic
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
 x1 <- coda.samples(m1,c('beta.Year','Player.Effect'), n.iter = 40000)
 
 gelman.diag(x1, autoburnin = F)
 ```
-
+  
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+gelman.plot(x1)
+```
+  
 ## Effective samples sizes are adequate.
 
 ```{r, message=FALSE, warning=FALSE}
@@ -344,7 +378,7 @@ effectiveSize(x1)
 ## Retrieve replicate dataset and probabilities
 
 ```{r, message=FALSE, warning=FALSE}
-x1 <- coda.samples(m1, c('beta.Year','Player.Effect','prob','FGMrep'), n.iter = 40000)
+x1 <- coda.samples(m1, c('beta.Year','Player.Effect','prob','FGMrep'), n.iter = 40000, thin=40)
 ```
 
 # Model Assessment 
@@ -454,8 +488,10 @@ plot_player_posterior_probs <- function(data, player_row_id, posterior) {
 }
 ```
 
-## Check Stephen Curry successfully makes an attempted field goal for the past three years.
+## Density of Various Player through the Years
 
+If we look as Steven Curry's density plots we see no improvement in his performance over the 3 years examined. This was the case with most of our players
+  
 ```{r, message=FALSE, warning=FALSE}
 player_row_id <- which(model_data$Player == "Stephen Curry")
 # posterior prob
@@ -470,7 +506,7 @@ The posterior density does not show Stephen's improvement of making a field goal
 plot_player_posterior_probs(model_data, player_row_id, posterior)
 ```
 
-## Check Bradley Beal successfully makes an attempted field goal for the past three years.
+Check Bradley Beal successfully makes an attempted field goal for the past three years.
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 player_row_id <- which(model_data$Player == "Bradley Beal")
@@ -484,7 +520,7 @@ df_posterior_observed
 plot_player_posterior_probs(model_data, player_row_id, posterior)
 ```
 
-## Check DeMar DeRozan successfully makes an attempted field goal for the past three years.
+Check DeMar DeRozan successfully makes an attempted field goal for the past three years.
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 player_row_id <- which(model_data$Player == "DeMar DeRozan")
@@ -496,9 +532,9 @@ df_posterior_observed
 ```{r, message=FALSE, warning=FALSE, fig.height=4, fig.width=10}
 plot_player_posterior_probs(model_data, player_row_id, posterior)
 ```
-
-
-## Check Dennis Schroder successfully makes an attempted field goal for the past three years.
+  
+Check Dennis Schroder successfully makes an attempted field goal for the past three years. 
+  
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 player_row_id <- which(model_data$Player == "Dennis Schroder")
 posterior <- get_player_posterior_probs(df, model_data, player_row_id)
@@ -510,7 +546,31 @@ df_posterior_observed
 plot_player_posterior_probs(model_data, player_row_id, posterior)
 ```
 
+## Posterior Odds
+
+Here we show the posterior odds of each player improving from one year to the next. We take our poster sample for each player, and take the mean of comparing one year's vector being greater than the previous.
+As we can see the odds are not extreme that a player may improve from one year to the next, nor do we have a clear pattern. The model does not support the proposition that players improve from one year to another.   
+  
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# From Jerry to merge
+library(knitr)
+postodds <- data.frame(matrix(NA, nrow(model_data), ncol=2))
+for (i in 1:nrow(model_data)) {
+  post_prob <- get_player_posterior_probs(df, model_data, i)
+  postodds[i,] <- c(mean(post_prob[,1] > post_prob[,2]), mean(post_prob[,2] > post_prob[,1]))
+}
+postodds <- cbind(model_data$Player, postodds)
+names(postodds) <- c("Player", "2016-2017", "2015-2016")
+kable(postodds)
+
+```
+
+
+
 # Contributions
+    
+Xiang deserves a bulk of the credit as the idea was his and did the data gathering and model design, as well a first pass at much of the analysis. We all contributed to the final analysis, although Nilesh did much to improve the R coding. Jerry also contributed to the analysis and lead on much of the early work with regards to putting together the proposal and video presenation with the team's input. 
+  
 # References
 # Appendix
 
