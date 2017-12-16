@@ -37,6 +37,7 @@ pre { /* Code block - determines code spacing between lines */
 }
 </style>
 ```{r,  echo = FALSE, eval = FALSE}
+install.packages("dplyr")
 install.packages("gridExtra")
 ```
 
@@ -45,6 +46,8 @@ library(rjags)
 library(coda)
 library(lattice)
 library(gridExtra)
+library(ggplot2)
+library("dplyr")
 ```
 
 # Purpose
@@ -56,6 +59,190 @@ As we all know,a point guard controll the court by passing the ball to the playe
 We are using logistic regression to assess the probablity of shooting, also use a binomial model to estimate FGM. In order to build a hierachical model, each player is treated as a individual group by introducing a random effect called player effect. What's more, recent three years data will be used to check the continuous improvement.
 
 # Data
+
+```{r}
+# load data
+season_data <- read.table("Seasons_Stats.csv", header=TRUE, sep = ",", quote = '"')
+player_data <- read.table("Players.csv", header=TRUE, sep = ",", quote = '"')
+```
+
+```{r}
+# season data has multiple records for a player and year
+season_data <- season_data[with(season_data, order(Year, Player, -FG)), ]
+```
+
+```{r}
+season_data <- distinct(season_data, Year, Player, .keep_all = TRUE)
+```
+
+```{r}
+season_data <- season_data %>% group_by(Player) %>% mutate(Experience = 1:n())
+```
+
+```{r}
+# From players data only interested in height
+player_data <- subset(player_data, select = c("Player", "height"))
+colnames(player_data)[2] <- "Height"
+season_data <- merge(season_data, player_data, by = c("Player"))
+```
+
+```{r}
+# orignal source select columns
+select_columns <- c("Player", "Tm", "Pos", "Height", "Year", "Age", "FG", "FGA", "BLK", "MP", "PTS", "PER")
+
+# columns that don't change per year
+common_columns <- c("Player", "Tm", "Pos", "Height")
+
+# interested observations per year
+yearly_columns <- c("Age", "FG", "FGA", "MP", "BLK", "PTS", "PER")
+  
+# interested positions
+interested_positions <- c("PG", "SG")
+
+# wide format data
+#   has yearly columns suffixed as follows
+#    - latest year => "_year_latest"
+#    - 2nd latest year => "_year_minus_1"
+#    - 3rd latest year => "_year_minus_2"
+#    - Nth latest year => "_year_minus_(N-1)"
+#
+get_model_data_wide <- function(season_data, years, age) {
+  last_n_seasons <- subset(season_data, 
+                           Year %in% years & Pos %in% interested_positions, 
+                           select = c(common_columns, c("Year"), yearly_columns))
+  
+  n_years <- length(years)
+  yearly_suffix <- c(paste("_year_minus_", (n_years - 1):1, sep = ""), "_year_latest")
+  
+  sorted_years <- sort(years)
+  starting_age <- -1
+  
+  suppressWarnings(rm(wide_data))
+  
+  if (! missing(age)) {
+    starting_age <- age
+  }
+  
+  for (year_idx in 1:n_years) {
+    year <- sorted_years[year_idx]
+    if (-1 == starting_age) {
+      yearly_data <- subset(last_n_seasons, Year == year, select = -c(Year))
+    } else {
+      yearly_data <- subset(last_n_seasons, Year == year & Age == starting_age, select = -c(Year))
+    }
+    colnames(yearly_data) <- c(common_columns, paste(yearly_columns, yearly_suffix[year_idx], sep = ""))
+    yearly_data <- yearly_data[!duplicated(yearly_data$Player),]
+    
+    if (exists("wide_data")) {
+      wide_data <- merge(wide_data, yearly_data, by = common_columns)
+    } else {
+      wide_data <- yearly_data
+    }
+
+    if (-1 != starting_age) {
+      starting_age <- starting_age + 1
+    }    
+  }
+  
+  wide_data$Pos <- factor(wide_data$Pos)
+  wide_data$Tm <- factor(wide_data$Tm)
+
+  return(wide_data)
+}
+
+# converts long format to wide format
+#
+wide_data_to_long_data <- function(wide_data, years) {
+
+    # now have records where data exists for all years for each player
+  # no unflatten it.
+  n_years <- length(years)
+  yearly_suffix <- c(paste("_year_minus_", (n_years - 1):1, sep = ""), "_year_latest")
+  
+  suppressWarnings(rm(long_data))
+  sorted_years <- sort(years)
+  for (year_idx in 1:n_years) {
+    year <- sorted_years[year_idx]
+    yearly_data <- subset(wide_data, select = c(common_columns, paste(yearly_columns, yearly_suffix[year_idx], sep = "")))
+    
+    colnames(yearly_data) <- c(common_columns, yearly_columns)
+    yearly_data$Year = year
+    
+    if (exists("long_data")) {
+      long_data <- rbind(long_data, yearly_data)
+    } else {
+      long_data <- yearly_data
+    }
+  }
+  
+  return(long_data)
+}
+
+```
+
+```{r}
+interested_years <- c(2014, 2015, 2016, 2017)
+
+model_data <- get_model_data_wide(season_data, interested_years)
+colnames(model_data)
+# filter by teams
+interested_teams <- c("ATL", "GSW", "MEM", "TOR", "WAS")
+model_data <- subset(model_data, Tm %in% interested_teams)
+model_data$Tm <- factor(model_data$Tm)
+
+nrow(model_data)
+```
+
+```{r}
+model_data_long <- wide_data_to_long_data(model_data, interested_years)
+colnames(model_data_long)
+nrow(model_data_long)
+summary(model_data_long$Age)
+```
+
+```{r}
+# plot
+ggplot(data = model_data_long, aes(x=Year, y=FG)) + geom_line(aes(colour=Player))
+```
+
+```{r}
+# plot
+ggplot(data = model_data_long, aes(x=Year, y=PER)) + geom_line(aes(colour=Player))
+
+```
+
+
+```{r}
+ggplot(model_data, aes(Height)) +
+  geom_line(aes(y = FG_year_latest), colour = "red") + 
+  geom_line(aes(y = FG_year_minus_1), color = "green") + 
+  geom_line(aes(y = FG_year_minus_2), color = "blue")
+```
+
+
+```{r}
+model_data$HeightScaled <- as.vector(scale(model_data$Height, scale = 2 * sd(model_data$Height)))
+model1_d <- list(FG = model_data[, grep("FG_year_.+", names(model_data), value = TRUE)],
+           FGA = model_data[, grep("FGA_year_.+", names(model_data), value = TRUE)],
+           pos = unclass(model_data$Pos),
+           htScaled = model_data$HeightScaled
+           )
+model1_inits <- list(
+  list(betaPos=c(10, 10), betaHt = 10, .RNG.name = "base::Marsaglia-Multicarry", .RNG.seed = 123),
+  list(betaPos=c(10, -10), betaHt = -10, .RNG.name = "base::Marsaglia-Multicarry", .RNG.seed = 234),
+  list(betaPos=c(-10, -10), betaHt = -10, .RNG.name = "base::Marsaglia-Multicarry", .RNG.seed = 345),
+  list(betaPos=c(-10, 10), betaHt = 10, .RNG.name = "base::Marsaglia-Multicarry", .RNG.seed = 456)
+              )
+```
+
+In case we are only interested in Teams or Positions for which at least N records are avaialble
+
+```{r}
+nrow(model_data)
+table(model_data$Tm) >= 6
+model_data_1 <- subset(model_data, model_data$Tm %in% (table(model_data$Tm) >= 3))
+nrow(model_data_1)
+```
 
 8 rows with one row per player
 
@@ -126,10 +313,11 @@ d1 <- list(FGM = data[,c("FGM_2017","FGM_2016","FGM_2015")],
 ## Initialization of chains
 
 ```{r}
-inits1 <- list(list(beta.Year=c(-1,-1,-1,-1,-1,-1,-1,-1),mu=10, sigmaPE=0.001),
-               list(beta.Year=c(-1,-1,-1,-1,-1,-1,-1,-1),mu=-10,sigmaPE=99),
-               list(beta.Year=c(-1,-1,-1,-1,-1,-1,-1,-1),mu=10,sigmaPE=99),
-               list(beta.Year=c(-1,-1,-1,-1,-1,-1,-1,-1),mu=-10,sigmaPE=0.01))
+inits1 <- list(list(beta.Year=c(-1,-1,-1,-1,-1,-1,-1,-1),mu=10, sigmaPE=0.001, .RNG.name = "base::Marsaglia-Multicarry", .RNG.seed = 123),
+               list(beta.Year=c(-1,-1,-1,-1,-1,-1,-1,-1),mu=-10,sigmaPE=99, .RNG.name = "base::Marsaglia-Multicarry", .RNG.seed = 234),
+               list(beta.Year=c(-1,-1,-1,-1,-1,-1,-1,-1),mu=10,sigmaPE=99, .RNG.name = "base::Marsaglia-Multicarry", .RNG.seed = 345),
+               list(beta.Year=c(-1,-1,-1,-1,-1,-1,-1,-1),mu=-10,sigmaPE=0.01, .RNG.name = "base::Marsaglia-Multicarry", .RNG.seed = 456)
+               )
 ```
 
 ## Build model
@@ -357,5 +545,9 @@ plot_player_posterior_probs(player_row_id, posterior)
 # Contributions
 # References
 # Appendix
+
+* [NBA Dataset](https://www.kaggle.com/drgilermo/nba-players-stats/downloads/nba-players-stats-since-1950.zip)
+
+* [Basketball reference glossary](https://www.basketball-reference.com/about/glossary.html)
 
 
