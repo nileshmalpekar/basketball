@@ -6,42 +6,11 @@ fontsize: 11pt
 output:
   pdf_document: default
 ---
-<style type="text/css">
-
-body{ /* Normal  */
-      font-size: 12px;
-  }
-td {  /* Table  */
-  font-size: 8px;
-}
-h1.title {
-  font-size: 38px;
-  color: DarkRed;
-}
-h1 { /* Header 1 */
-  font-size: 28px;
-  color: DarkBlue;
-}
-h2 { /* Header 2 */
-    font-size: 22px;
-  color: DarkBlue;
-}
-h3 { /* Header 3 */
-  font-size: 18px;
-  font-family: "Times New Roman", Times, serif;
-  color: DarkBlue;
-}
-code.r{ /* Code block */
-    font-size: 12px;
-}
-pre { /* Code block - determines code spacing between lines */
-    font-size: 14px;
-}
-</style>
 ```{r, echo=FALSE, eval=FALSE, warning=FALSE, message=FALSE}
 install.packages("dplyr")
 install.packages("gridExtra")
 ```
+
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 library(rjags)
 library(coda)
@@ -51,11 +20,12 @@ library(ggplot2)
 library(dplyr)
 library(knitr)
 ```
+
 # Purpose
 
 ## Background 
 
-As we all know,a point guard controll the court by passing the ball to the player who is wide open. He is a decision maker to deliver assists or finish the attack by himself. The question arises, who has the highest shooting percentage among the top NBA point guards. Is this related to the professional years of experience?
+As we all know,a point guard controls the court by passing the ball to the player who is wide open. He is a decision maker to deliver assists or finish the attack by himself. The question arises, who has the highest shooting percentage among the top NBA point guards. Is this related to the professional years of experience?
 
 We are using logistic regression to assess the probablity of shooting, also use a binomial model to estimate field goals made by the NBA players. In order to build a hierachical model, each player is treated as a individual group by introducing a random effect called player effect. What's more, recent three years data will be used to check the continuous improvement.
 
@@ -63,8 +33,7 @@ We are using logistic regression to assess the probablity of shooting, also use 
 
 ## Original data
 
-Original data is retrieved from Kaggle competition site [NBA Dataset](https://www.kaggle.com/drgilermo/nba-players-stats/downloads/nba-players-stats-since-1950.zip)
-Using our homework datasets as a guide, Xiang got our data set to manageable level for our questions. We concentrate on players and years with players representing groups similar to how rats where used as groups in our previous lectures. 
+Original data is retrieved from Kaggle competition site [NBA Dataset](https://www.kaggle.com/drgilermo/nba-players-stats/downloads/nba-players-stats-since-1950.zip). Using our homework datasets as a guide, Xiang got our data set to manageable level for our questions. We concentrate on players and years with players representing groups similar to how rats where used as groups in our previous lectures. 
 
 The zip file contains two separate CSV files:
 
@@ -73,10 +42,9 @@ The zip file contains two separate CSV files:
 
 ```{r, message=FALSE, warning=FALSE}
 season_data <- read.table("Seasons_Stats.csv", header=TRUE, sep = ",", quote = '"')
-player_data <- read.table("Players.csv", header=TRUE, sep = ",", quote = '"')
 ```
 
-For this project, we are focusing on specific fields within this dataset which are described beow:
+For this project, we are focusing on specific fields within the `season_data` dataset which are described beow:
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 data_meta <- data.frame( 
@@ -91,7 +59,6 @@ kable(data_meta)
 The dataset contains duplicate rows for multiple players for the same year. As part of the data preparation, we have removed duplicate rows based on **Year** and **Player**.
 
 ```{r, message=FALSE, warning=FALSE}
-# Keep only single record for a player and year; rows with highest FG is retained
 season_data <- season_data[with(season_data, order(Year, Player, -FG)), ]
 season_data <- distinct(season_data, Year, Player, .keep_all = TRUE)
 ```
@@ -106,14 +73,6 @@ For this project, we need to extract following two features from the original da
 ```{r, message=FALSE, warning=FALSE}
 season_data <- season_data %>% group_by(Player) %>% mutate(EXP = 1:n())
 season_data[, "FG%"] <- season_data$FG / season_data$FGA
-```
-
-Merge Seasons_Stat with Players to get height of the player
-
-```{r, message=FALSE, warning=FALSE}
-player_data <- subset(player_data, select = c("Player", "height"))
-colnames(player_data)[2] <- "Height"
-season_data <- merge(season_data, player_data, by = c("Player"))
 ```
 
 ## Preparing modeling data
@@ -134,21 +93,15 @@ INTERESTED_POSITIONS <- c("PG")
 INTERESTED_YEARS <- c(2015, 2016, 2017)
 YEAR_COUNT <- length(INTERESTED_YEARS)
 
-# interested teams
-INTERESTED_TEAMS <- c("ATL", "GSW", "MEM", "TOR", "WAS")
-
 # columns that don't change per year
-COMMON_COLUMNS <- c("Player", "Tm", "Pos", "Height")
+COMMON_COLUMNS <- c("Player", "Pos")
 
 # interested observations per year
 YEARLY_COLUMNS <- c("FG", "FGA", "EXP", "FG%")
-# YEARLY_COLUMNS <- c("Age", "FG", "FGA", "MP", "BLK", "PTS", "EXP")
 
 # orignal source select columns
 SELECT_COLUMNS <- c(COMMON_COLUMNS, "Year", YEARLY_COLUMNS)
-```
 
-```{r, echo=FALSE, message=FALSE, warning=FALSE}
 # returns column year suffix as "_0", "_PRIOR_1", "_PRIOR_2", ..., "_PRIOR_{N-1}"
 get_column_year_suffix <- function(num_years) {
   year_suffix <- c("_0", paste("_PRIOR_", 1:(num_years - 1), sep = ""))
@@ -195,7 +148,6 @@ get_model_data_wide <- function(season_data, years, positions, minFG) {
   }
   
   wide_data$Pos <- factor(wide_data$Pos)
-  wide_data$Tm <- factor(wide_data$Tm)
 
   return(wide_data)
 }
@@ -228,17 +180,17 @@ wide_data_to_long_data <- function(wide_data, years) {
 
 ```{r, message=FALSE, warning=FALSE}
 # get modeling data
-model_data <- get_model_data_wide(season_data, INTERESTED_YEARS, INTERESTED_POSITIONS, 300)
-# filter by teams
-#model_data <- subset(model_data, Tm %in% INTERESTED_TEAMS)
-#model_data$Tm <- factor(model_data$Tm)
+model_data <- get_model_data_wide(season_data, INTERESTED_YEARS, 
+                INTERESTED_POSITIONS, 300)
 model_data_row_count <- nrow(model_data)
-display_column_names <- c("Player", get_column_names("FG", YEAR_COUNT), get_column_names("FGA", YEAR_COUNT))
+display_column_names <- c("Player", get_column_names("FG", YEAR_COUNT), 
+                get_column_names("FGA", YEAR_COUNT))
 head(model_data[, display_column_names])
 ```
+
 ## Modeling data visualization
 
-The chat below shows field goals for each player per year. For most player there is growth in field goals from previous year to next year.
+The chart below shows field goals for each player per year. For most player there is growth in field goals from previous year to next year.
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 model_data_long <- wide_data_to_long_data(model_data, INTERESTED_YEARS)
@@ -313,7 +265,7 @@ m1 <- jags.model('model-logistic.bug', d1, inits = inits1, n.chains = 4, n.adapt
 
 ## Burn-ins and check for convergence
 
-We tried various values for to speed convergence. None lead to very fast convergence but the above values, after much trial and error, were finally acceptable. Still it took a burn-in of over 1 million iterations to get convergence.
+We tried various values to speed convergence. None lead to very fast convergence but the above values, after much trial and error, were finally acceptable. Still it took a burn-in of over 1 million iterations to get convergence.
 
 ```{r, message=FALSE, warning=FALSE}
 update(m1, 1024000)
@@ -392,9 +344,7 @@ probs <-  df[, get_posterior_columns("prob", model_data_row_count, YEAR_COUNT)]
 FGMrep <-  df[, get_posterior_columns("FGMrep", model_data_row_count, YEAR_COUNT)]
 FGM.v <- unlist(d1$FGM)
 FGA.v <- unlist(d1$FGA)
-```
 
-```{r, message=FALSE, warning=FALSE}
 Tchi <- matrix(NA, nrow(FGMrep), model_data_row_count * YEAR_COUNT)
 Tchirep <- matrix(NA, nrow(FGMrep), model_data_row_count * YEAR_COUNT)
 for (s in 1:nrow(FGMrep)){
@@ -402,13 +352,14 @@ for (s in 1:nrow(FGMrep)){
   Tchirep[s,] <- sum((FGMrep[s,] - FGA.v * probs[s,])^2 / (FGA.v * probs[s,] * (1-probs[s,])))
 }
 ```
+
 No over dispersion problem as `r mean(Tchirep >= Tchi)`.
 
 ## Marginal posterior p-value
 
 Here we are checking the marginal posterior predictive p-value of (FGMrep[i] > y[i]). Effectively, comparing replicated data to our model’s actual data. The closer we get to 1 or 0, the more the model is off.
 
-```{r, message=FALSE, warning=FALSE}
+```{r, echo=FALSE,message=FALSE, warning=FALSE}
 FGM.p2017 <- numeric(model_data_row_count)
 FGM.p2016 <- numeric(model_data_row_count)
 FGM.p2015 <- numeric(model_data_row_count)
@@ -605,3 +556,241 @@ e.s
 s.x2
 ```
 
+## R code
+
+### Data preperation code
+
+```{r, eval=FALSE, message=FALSE, warning=FALSE}
+# returns column year suffix as "_0", "_PRIOR_1", "_PRIOR_2", ..., "_PRIOR_{N-1}"
+get_column_year_suffix <- function(num_years) {
+  year_suffix <- c("_0", paste("_PRIOR_", 1:(num_years - 1), sep = ""))
+  return (year_suffix)  
+}
+
+# returns column names as "{COL_NAME}_0", "{COL_NAME}_PRIOR_1", "{COL_NAME}_PRIOR_2", ...  
+get_column_names <- function(col_name, num_years) {
+  suffix <- get_column_year_suffix(num_years)
+  column_names <- paste(col_name, suffix, sep = "")
+  return (column_names)
+}
+
+# returns modeling data for given year, positions and age
+get_model_data_wide <- function(season_data, years, positions, minFG) {
+  num_years <- length(years)
+  sorted_years <- sort(years, decreasing = TRUE)
+  yearly_suffix <- get_column_year_suffix(num_years)
+  suppressWarnings(rm(wide_data))
+
+  last_n_seasons <- subset(season_data, Year %in% years, 
+      select = c(COMMON_COLUMNS, c("Year"), YEARLY_COLUMNS))
+
+  if (! missing(positions)) {
+    last_n_seasons <- subset(last_n_seasons, Pos %in% positions, 
+      select = c(COMMON_COLUMNS, c("Year"), YEARLY_COLUMNS))
+  }
+  
+  if (! missing(minFG)) {
+    last_n_seasons <- subset(last_n_seasons, FG >= minFG, 
+      select = c(COMMON_COLUMNS, c("Year"), YEARLY_COLUMNS))
+  }
+  
+  for (year_idx in 1:num_years) {
+    year <- sorted_years[year_idx]
+    yearly_data <- subset(last_n_seasons, Year == year, select = -c(Year))
+    colnames(yearly_data) <- c(COMMON_COLUMNS, paste(YEARLY_COLUMNS, 
+        yearly_suffix[year_idx], sep = ""))
+
+    if (exists("wide_data")) {
+      wide_data <- merge(wide_data, yearly_data, by = COMMON_COLUMNS)
+    } else {
+      wide_data <- yearly_data
+    }
+  }
+  
+  wide_data$Pos <- factor(wide_data$Pos)
+
+  return(wide_data)
+}
+
+# converts long format to wide format
+wide_data_to_long_data <- function(wide_data, years) {
+  num_years <- length(years)
+  sorted_years <- sort(years, decreasing = TRUE)
+  yearly_suffix <- get_column_year_suffix(num_years)
+
+  suppressWarnings(rm(long_data))
+  
+  for (year_idx in 1:num_years) {
+    year <- sorted_years[year_idx]
+    yearly_data <- subset(wide_data, select = c(COMMON_COLUMNS, 
+        paste(YEARLY_COLUMNS, yearly_suffix[year_idx], sep = "")))
+    
+    colnames(yearly_data) <- c(COMMON_COLUMNS, YEARLY_COLUMNS)
+    yearly_data$Year = year
+    
+    if (exists("long_data")) {
+      long_data <- rbind(long_data, yearly_data)
+    } else {
+      long_data <- yearly_data
+    }
+  }
+  
+  return(long_data)
+}
+```
+
+### Model data visualization
+
+```{r, eval=FALSE, message=FALSE, warning=FALSE}
+model_data_long <- wide_data_to_long_data(model_data, INTERESTED_YEARS)
+ggplot(data = model_data_long, aes(x=Year, y=FG)) + geom_line(aes(colour=Player))
+```
+
+### Check overdispersion, chi-square discrepancy
+
+```{r, eval=FALSE, message=FALSE, warning=FALSE}
+df <- as.matrix(x2)
+
+get_posterior_columns <- function(col_name, i, j) {
+  suppressWarnings(rm(columns.v))
+  
+  for (j1 in 1:j) {
+    temp <- paste( col_name, "[", 1:i, ",", j1, "]", sep = "")
+    
+    if (exists("columns.v")) {
+      columns.v <- c(columns.v, temp)
+    } else {
+      columns.v <- temp
+    }
+  }
+  return(columns.v)
+}
+probs <-  df[, get_posterior_columns("prob", model_data_row_count, YEAR_COUNT)]
+FGMrep <-  df[, get_posterior_columns("FGMrep", model_data_row_count, YEAR_COUNT)]
+FGM.v <- unlist(d1$FGM)
+FGA.v <- unlist(d1$FGA)
+
+Tchi <- matrix(NA, nrow(FGMrep), model_data_row_count * YEAR_COUNT)
+Tchirep <- matrix(NA, nrow(FGMrep), model_data_row_count * YEAR_COUNT)
+for (s in 1:nrow(FGMrep)){
+  Tchi[s,] <- sum((FGM.v - FGA.v * probs[s,])^2 / 
+                    (FGA.v * probs[s,] * (1-probs[s,])))
+  Tchirep[s,] <- sum((FGMrep[s,] - FGA.v * probs[s,])^2 / 
+                       (FGA.v * probs[s,] * (1-probs[s,])))
+}
+```
+
+### Marginal posterior p-value
+
+```{r, eval=FALSE,message=FALSE, warning=FALSE}
+FGM.p2017 <- numeric(model_data_row_count)
+FGM.p2016 <- numeric(model_data_row_count)
+FGM.p2015 <- numeric(model_data_row_count)
+
+for (s in 1:model_data_row_count) {
+  col_index <- which(colnames(FGMrep) == paste("FGMrep[", s, ",1]", sep = ""))
+  FGM.p2017[s] <- mean(FGMrep[,  col_index] >= model_data[s, "FG_0"])
+  
+  col_index <- which(colnames(FGMrep) == paste("FGMrep[", s, ",2]", sep = ""))
+  FGM.p2016[s] <- mean(FGMrep[,  col_index] >= model_data[s, "FG_PRIOR_1"])
+  
+  col_index <- which(colnames(FGMrep) == paste("FGMrep[", s, ",3]", sep = ""))
+  FGM.p2015[s] <- mean(FGMrep[,  col_index] >= model_data[s, "FG_PRIOR_2"])     
+}
+posterior_p_df <- data.frame( Player = model_data$Player,
+    pValue.2017 = FGM.p2017,
+    pValue.2016 = FGM.p2016,
+    pValue.2015 = FGM.p2015
+    )
+kable(posterior_p_df)
+```
+
+### Posterior related utility functions
+
+```{r, eval=FALSE, message=FALSE, warning=FALSE}
+ilogit <-  function(x) 1/(1+exp(-x))
+
+get_player_posterior_probs <- function(df, data, player_row_id) {
+  beta.Year <- df[,paste('beta.Year[', player_row_id, ']', sep = '')]
+  player.Effect <- df[,paste('Player.Effect[', player_row_id, ']', sep = '')]
+  
+  ## HARD_CODED to 3 
+  posterior_0 <- numeric(nrow(df))
+  posterior_PRIOR_1 <- numeric(nrow(df))
+  posterior_PRIOR_2 <- numeric(nrow(df))
+  
+  ## HARD_CODED to Experience
+  col_names <- get_column_names("EXP", YEAR_COUNT)
+  
+  for (s in 1:nrow(df)) {
+    posterior_0[s] <- ilogit(beta.Year[s] * data[player_row_id, 
+        col_names[1]] + player.Effect[s])
+    posterior_PRIOR_1[s] <- ilogit(beta.Year[s] * data[player_row_id, 
+        col_names[2]] + player.Effect[s])
+    posterior_PRIOR_2[s] <- ilogit(beta.Year[s] * data[player_row_id, 
+        col_names[3]] + player.Effect[s])
+  }
+  posterior <- cbind(posterior_0, posterior_PRIOR_1, posterior_PRIOR_2)
+  
+  return(posterior)
+}
+
+get_player_posterior_vs_observed <- function(data, player_row_id, posterior) {
+  posterior_means <- apply(posterior, 2, mean)
+
+  df_compare <- data.frame(posterior = as.vector(posterior_means), 
+      observed = as.vector(as.matrix(
+      data[player_row_id, get_column_names("FG%", YEAR_COUNT)])))
+  rownames(df_compare) <- get_column_names("YEAR", YEAR_COUNT)
+
+  return (df_compare)
+}
+
+plot_player_posterior_probs <- function(data, player_row_id, posterior) {
+  fg_column_names <- get_column_names("FG%", YEAR_COUNT)
+  
+  plot1 <- densityplot(posterior[,"posterior_0"],
+            panel = function(x, ...) {
+             panel.densityplot(x, ...)
+              panel.abline(v = mean(x), col.line = "blue")
+              panel.abline(v = data[player_row_id, fg_column_names[1]], 
+                           col.line = "red")
+            },
+            xlab = paste("Posterior probability", INTERESTED_YEARS[1])
+            )
+  plot2 <- densityplot(posterior[,"posterior_PRIOR_1"],
+            panel = function(x, ...) {
+             panel.densityplot(x, ...)
+              panel.abline(v = mean(x), col.line = "blue")
+              panel.abline(v = data[player_row_id, fg_column_names[2]], 
+                           col.line = "red")
+            },
+            xlab = paste("Posterior probability", INTERESTED_YEARS[2])
+            )
+  plot3 <- densityplot(posterior[,"posterior_PRIOR_2"],
+            panel = function(x, ...) {
+             panel.densityplot(x, ...)
+              panel.abline(v = mean(x), col.line = "blue")
+              panel.abline(v = data[player_row_id, fg_column_names[3]], 
+                           col.line = "red")
+            },
+            xlab = paste("Posterior probability", INTERESTED_YEARS[3])
+            )
+  
+  grid.arrange(plot1, plot2, plot3, ncol = 3, nrow = 1)
+}
+```
+
+### Posterior odds
+
+```{r, eval=FALSE, message=FALSE, warning=FALSE}
+postodds <- data.frame(matrix(NA, model_data_row_count, ncol=2))
+for (i in 1:model_data_row_count) {
+  post_prob <- get_player_posterior_probs(df, model_data, i)
+  postodds[i,] <- c(mean(post_prob[,1] > post_prob[,2]), 
+                    mean(post_prob[,2] > post_prob[,1]))
+}
+postodds <- cbind(model_data$Player, postodds)
+names(postodds) <- c("Player", "2016-2017", "2015-2016")
+kable(postodds)
+```
