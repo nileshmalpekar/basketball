@@ -79,7 +79,7 @@ season_data[, "FG%"] <- season_data$FG / season_data$FGA
 
 For our project, we decided to use the data for the last 3 NBA seasons, i.e. 2017, 2016 and 2015.
 
-The data so far is in long format, i.e. for each player there is one row per year. However, we need daa in wide format so that there is a single row per player and year specific attributes should be columns in the dataset. As an example for **FG** (Field Goals) columns should be as follows:
+The data so far is in long format, i.e. for each player there is one row per year. However, we need data in wide format so that there is a single row per player and year specific attributes should be columns in the dataset. As an example for **FG** (Field Goals) columns should be as follows:
 
 * latest year: FG_0
 * 1st prior year: FG_PRIOR_1
@@ -192,7 +192,7 @@ head(model_data[, display_column_names])
 
 The chart below shows field goals for each player per year. For most player there is growth in field goals from previous year to next year.
 
-```{r, echo=FALSE, message=FALSE, warning=FALSE}
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.height=4, fig.width=10}
 model_data_long <- wide_data_to_long_data(model_data, INTERESTED_YEARS)
 ggplot(data = model_data_long, aes(x=Year, y=FG)) + geom_line(aes(colour=Player))
 ```
@@ -213,9 +213,11 @@ $\epsilon_i$ ~ iid N(0, $\sigma_{\epsilon}^2$)
   
 ## DAG Model  
 
-```{r, fig.retina=NULL, fig.height=4, echo=FALSE}
+```{r, figs, fig.retina=NULL, fig.height=4, echo=FALSE, fig.cap="I represents the players(groups) and J the years"}
 knitr::include_graphics("DAG_epsilon.jpg")
 ```
+
+\pagebreak
 
 ## Code  
 JAGS model. I will use scaled-t1 on coefficients in beta. and a flat uniform distribution for sigma of player effect
