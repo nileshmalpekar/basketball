@@ -212,9 +212,11 @@ $\epsilon_i$ ~ iid N(0, $\sigma_{\epsilon}^2$)
 \end{center}
   
 ## DAG Model  
-  
-![I represents the players(groups) and J the years](DAG_epsilon.jpg)
- 
+
+```{r, fig.retina=NULL, fig.height=4, echo=FALSE}
+knitr::include_graphics("DAG_epsilon.jpg")
+```
+
 ## Code  
 JAGS model. I will use scaled-t1 on coefficients in beta. and a flat uniform distribution for sigma of player effect
 ```{r,eval=F}
