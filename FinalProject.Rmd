@@ -92,7 +92,7 @@ data_meta <- data.frame(
     "Field Goals", "Field Goals Attempted", "Blocks")
   )
 
-kable(data_meta, caption = "Data source fields description", format = "html")
+kable(data_meta)
 ```
 
 The dataset contains duplicate rows for multiple players for the same year. As part of the data preparation, we have removed duplicate rows based on **Year** and **Player**.
