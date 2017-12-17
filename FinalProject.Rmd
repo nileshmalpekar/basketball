@@ -64,7 +64,6 @@ We are using logistic regression to assess the probablity of shooting, also use 
 ## Original data
 
 Original data is retrieved from Kaggle competition site [NBA Dataset](https://www.kaggle.com/drgilermo/nba-players-stats/downloads/nba-players-stats-since-1950.zip)
-
 Using our homework datasets as a guide, Xiang got our data set to manageable level for our questions. We concentrate on players and years with players representing groups similar to how rats where used as groups in our previous lectures. 
 
 The zip file contains two separate CSV files:
@@ -81,13 +80,10 @@ For this project, we are focusing on specific fields within this dataset which a
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 data_meta <- data.frame( 
-  Datasource = c("Seasons_Stats", "Season_Stats, Players", "Players", 
-      rep("Seasons_Stats", 8)),
-  Field_Name = c("Year", "Player", "Height", "Pos", "Tm", "Age", "MP", 
-      "PER", "FG", "FGA", "BLK"),
-  Description = c("NBA year", "Player name", "Height in cm", 
-      "Player position", "NBA team name", "Player age", "Minutes played", 
-      "Player Efficiency Rating", "Field Goals", "Field Goals Attempted", "Blocks")
+  Datasource = rep("Seasons_Stats", 5),
+  Field_Name = c("Year", "Player", "Pos", "FG", "FGA"),
+  Description = c("NBA year", "Player name", "Player position", 
+                  "Field Goals", "Field Goals Attempted")
   )
 kable(data_meta)
 ```
@@ -132,7 +128,7 @@ The data so far is in long format, i.e. for each player there is one row per yea
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 # interested positions
-INTERESTED_POSITIONS <- c("PG", "SG")
+INTERESTED_POSITIONS <- c("PG")
 
 # interested years
 INTERESTED_YEARS <- c(2015, 2016, 2017)
@@ -167,7 +163,7 @@ get_column_names <- function(col_name, num_years) {
 }
 
 # returns modeling data for given year, positions and age
-get_model_data_wide <- function(season_data, years, positions, age) {
+get_model_data_wide <- function(season_data, years, positions, minFG) {
   num_years <- length(years)
   sorted_years <- sort(years, decreasing = TRUE)
   yearly_suffix <- get_column_year_suffix(num_years)
@@ -177,22 +173,18 @@ get_model_data_wide <- function(season_data, years, positions, age) {
       select = c(COMMON_COLUMNS, c("Year"), YEARLY_COLUMNS))
 
   if (! missing(positions)) {
-    last_n_seasons <- subset(season_data, Pos %in% positions, 
+    last_n_seasons <- subset(last_n_seasons, Pos %in% positions, 
       select = c(COMMON_COLUMNS, c("Year"), YEARLY_COLUMNS))
   }
   
-  starting_age <- -1
-  if (! missing(age)) {
-    starting_age <- age
+  if (! missing(minFG)) {
+    last_n_seasons <- subset(last_n_seasons, FG >= minFG, 
+      select = c(COMMON_COLUMNS, c("Year"), YEARLY_COLUMNS))
   }
   
   for (year_idx in 1:num_years) {
     year <- sorted_years[year_idx]
-    if (-1 == starting_age) {
-      yearly_data <- subset(last_n_seasons, Year == year, select = -c(Year))
-    } else {
-      yearly_data <- subset(last_n_seasons, Year == year & Age == starting_age, select = -c(Year))
-    }
+    yearly_data <- subset(last_n_seasons, Year == year, select = -c(Year))
     colnames(yearly_data) <- c(COMMON_COLUMNS, paste(YEARLY_COLUMNS, yearly_suffix[year_idx], sep = ""))
 
     if (exists("wide_data")) {
@@ -200,10 +192,6 @@ get_model_data_wide <- function(season_data, years, positions, age) {
     } else {
       wide_data <- yearly_data
     }
-
-    if (-1 != starting_age) {
-      starting_age <- starting_age + 1
-    }    
   }
   
   wide_data$Pos <- factor(wide_data$Pos)
@@ -236,18 +224,18 @@ wide_data_to_long_data <- function(wide_data, years) {
   
   return(long_data)
 }
-
 ```
 
 ```{r, message=FALSE, warning=FALSE}
 # get modeling data
-model_data <- get_model_data_wide(season_data, INTERESTED_YEARS, INTERESTED_POSITIONS)
+model_data <- get_model_data_wide(season_data, INTERESTED_YEARS, INTERESTED_POSITIONS, 300)
 # filter by teams
-model_data <- subset(model_data, Tm %in% INTERESTED_TEAMS)
-model_data$Tm <- factor(model_data$Tm)
+#model_data <- subset(model_data, Tm %in% INTERESTED_TEAMS)
+#model_data$Tm <- factor(model_data$Tm)
 model_data_row_count <- nrow(model_data)
+display_column_names <- c("Player", get_column_names("FG", YEAR_COUNT), get_column_names("FGA", YEAR_COUNT))
+head(model_data[, display_column_names])
 ```
-
 ## Modeling data visualization
 
 The chat below shows field goals for each player per year. For most player there is growth in field goals from previous year to next year.
@@ -256,19 +244,19 @@ The chat below shows field goals for each player per year. For most player there
 model_data_long <- wide_data_to_long_data(model_data, INTERESTED_YEARS)
 ggplot(data = model_data_long, aes(x=Year, y=FG)) + geom_line(aes(colour=Player))
 ```
-\pagebreak
 
 # Model
   
 ## Notation  
 
 \begin{center}
-$y_{ij}$ = Shooting rate of player *i* at year *j* 
+$y_{ij}$ = Shooting rate of player i at year j 
 $x_1$ = 2017, $x_2$ = 2016, $x_3$ = 2015  
   
 $y_i$ | $\beta$, $X_i$ ~ indep. Bin($n_i$, $p_i$)  
-logit($p_i$) = $X_i$$\beta$ + $\epsilon_i$, $\epsilon_i$ ~ iid
-N(0, $\sigma_{\epsilon}^2$), Inv-$\chi^2$($\nu_i$, $s_{j}^2$) 
+logit($p_i$) = $X_i$$\beta$ + $\epsilon_i$,  
+
+$\epsilon_i$ ~ iid N(0, $\sigma_{\epsilon}^2$)  
 \end{center}
   
 ## DAG Model  
@@ -334,7 +322,7 @@ update(m1, 1024000)
 ## Posterior samples and Gelman Statistic
 
 ```{r, message=FALSE, warning=FALSE}
-x1 <- coda.samples(m1,c('beta.Year','Player.Effect'), n.iter = 40000)
+x1 <- coda.samples(m1,c('beta.Year','Player.Effect'), n.iter = 70000)
 ```
 ```{r, message=FALSE, warning=FALSE}
 g.d <- gelman.diag(x1, autoburnin = F)
@@ -356,10 +344,8 @@ For details on individual sample sizes, please refer to the appendix.
 
 ```{r, message=FALSE, warning=FALSE}
 x2 <- coda.samples(m1, c('beta.Year','Player.Effect','prob','FGMrep'), 
-                   n.iter = 40000, thin=40)
+                   n.iter = 70000, thin=40)
 ```
-
-\pagebreak
 
 # Model Assessment 
 
@@ -417,6 +403,35 @@ for (s in 1:nrow(FGMrep)){
 }
 ```
 No over dispersion problem as `r mean(Tchirep >= Tchi)`.
+
+## Marginal posterior p-value
+
+Here we are checking the marginal posterior predictive p-value of (FGMrep[i] > y[i]). Effectively, comparing replicated data to our model’s actual data. The closer we get to 1 or 0, the more the model is off.
+
+```{r, message=FALSE, warning=FALSE}
+FGM.p2017 <- numeric(model_data_row_count)
+FGM.p2016 <- numeric(model_data_row_count)
+FGM.p2015 <- numeric(model_data_row_count)
+
+for (s in 1:model_data_row_count) {
+  col_index <- which(colnames(FGMrep) == paste("FGMrep[", s, ",1]", sep = ""))
+  FGM.p2017[s] <- mean(FGMrep[,  col_index] >= model_data[s, "FG_0"])
+  
+  col_index <- which(colnames(FGMrep) == paste("FGMrep[", s, ",2]", sep = ""))
+  FGM.p2016[s] <- mean(FGMrep[,  col_index] >= model_data[s, "FG_PRIOR_1"])
+  
+  col_index <- which(colnames(FGMrep) == paste("FGMrep[", s, ",3]", sep = ""))
+  FGM.p2015[s] <- mean(FGMrep[,  col_index] >= model_data[s, "FG_PRIOR_2"])     
+}
+posterior_p_df <- data.frame( Player = model_data$Player,
+    pValue.2017 = FGM.p2017,
+    pValue.2016 = FGM.p2016,
+    pValue.2015 = FGM.p2015
+    )
+kable(posterior_p_df)
+```
+
+We can see that the model looks good for Elfrid Payton, but for the other players we are not too precise. The evidence is not strong that years of experience effect a higher rate of field goals made per field goals attempted.
 
 # Results
 
@@ -489,7 +504,7 @@ plot_player_posterior_probs <- function(data, player_row_id, posterior) {
 
 ## Density of Various Player through the Years
 
-If we look as Steven Curry's density plots we see no improvement in his performance over the 3 years examined. This was the case with most of our players
+If we look as Stephen Curry's density plots we see no improvement in his performance over the 3 years examined. This was the case with most of our players
   
 ```{r, message=FALSE, warning=FALSE}
 player_row_id <- which(model_data$Player == "Stephen Curry")
@@ -505,10 +520,10 @@ The posterior density does not show Stephen's improvement of making a field goal
 plot_player_posterior_probs(model_data, player_row_id, posterior)
 ```
 
-Check Bradley Beal successfully makes an attempted field goal for the past three years.
+Check Elfrid Payton successfully makes an attempted field goal for the past three years.
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
-player_row_id <- which(model_data$Player == "Bradley Beal")
+player_row_id <- which(model_data$Player == "Elfrid Payton")
 # posterior prob
 posterior <- get_player_posterior_probs(df, model_data, player_row_id)
 df_posterior_observed <- get_player_posterior_vs_observed(model_data, player_row_id, posterior)
@@ -519,10 +534,10 @@ kable(df_posterior_observed)
 plot_player_posterior_probs(model_data, player_row_id, posterior)
 ```
 
-Check DeMar DeRozan successfully makes an attempted field goal for the past three years.
+Check Kyrie Irving successfully makes an attempted field goal for the past three years.
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
-player_row_id <- which(model_data$Player == "DeMar DeRozan")
+player_row_id <- which(model_data$Player == "Kyrie Irving")
 posterior <- get_player_posterior_probs(df, model_data, player_row_id)
 df_posterior_observed <- get_player_posterior_vs_observed(model_data, player_row_id, posterior)
 kable(df_posterior_observed)
@@ -531,15 +546,6 @@ kable(df_posterior_observed)
 ```{r, message=FALSE, warning=FALSE, fig.height=4, fig.width=10}
 plot_player_posterior_probs(model_data, player_row_id, posterior)
 ```
-  
-Check Dennis Schroder successfully makes an attempted field goal for the past three years. 
-  
-```{r, echo=FALSE, message=FALSE, warning=FALSE}
-player_row_id <- which(model_data$Player == "Dennis Schroder")
-posterior <- get_player_posterior_probs(df, model_data, player_row_id)
-df_posterior_observed <- get_player_posterior_vs_observed(model_data, player_row_id, posterior)
-kable(df_posterior_observed)
-```
 
 ## Posterior Odds
 
@@ -547,8 +553,8 @@ Here we show the posterior odds of each player improving from one year to the ne
 As we can see the odds are not extreme that a player may improve from one year to the next, nor do we have a clear pattern. The model does not support the proposition that players improve from one year to another.   
   
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
-postodds <- data.frame(matrix(NA, nrow(model_data), ncol=2))
-for (i in 1:nrow(model_data)) {
+postodds <- data.frame(matrix(NA, model_data_row_count, ncol=2))
+for (i in 1:model_data_row_count) {
   post_prob <- get_player_posterior_probs(df, model_data, i)
   postodds[i,] <- c(mean(post_prob[,1] > post_prob[,2]), mean(post_prob[,2] > post_prob[,1]))
 }
@@ -556,6 +562,10 @@ postodds <- cbind(model_data$Player, postodds)
 names(postodds) <- c("Player", "2016-2017", "2015-2016")
 kable(postodds)
 ```
+
+## Conclusion
+
+This project shows that the shooting accuracy doesn't have a statistically significant relationship with years of professional experience. The player's personal effect is still the major impact. This is related to the individual player to make a better decision not to pass but taking over and make an attempted basket.
 
 # Contributions
     
