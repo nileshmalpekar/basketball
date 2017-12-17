@@ -55,9 +55,9 @@ library(knitr)
 
 ## Background 
 
-As we all know,a point guard controll the court by passing the ball to the player who is wide open. He is a decision maker to deliver assists or finish the attack by himself. The question arises, who has the highest shooting percentage among the top NBA point guards. Is this related to the professional years of experience.
+As we all know,a point guard controll the court by passing the ball to the player who is wide open. He is a decision maker to deliver assists or finish the attack by himself. The question arises, who has the highest shooting percentage among the top NBA point guards. Is this related to the professional years of experience?
 
-We are using logistic regression to assess the probablity of shooting, also use a binomial model to estimate FGM. In order to build a hierachical model, each player is treated as a individual group by introducing a random effect called player effect. What's more, recent three years data will be used to check the continuous improvement.
+We are using logistic regression to assess the probablity of shooting, also use a binomial model to estimate field goals made by the NBA players. In order to build a hierachical model, each player is treated as a individual group by introducing a random effect called player effect. What's more, recent three years data will be used to check the continuous improvement.
 
 # Data
 
@@ -314,20 +314,17 @@ inits1 <- list(list(beta.Year=rep(-1, model_data_row_count), mu=10, sigmaPE=0.00
                list(beta.Year=rep(-1, model_data_row_count), mu=-10, sigmaPE=0.01, .RNG.name = "base::Marsaglia-Multicarry", .RNG.seed = 456))
 ```
 
-
 ## Build model
 
 ```{r, message=FALSE, warning=FALSE}
 m1 <- jags.model('model-logistic.bug', d1, inits = inits1, n.chains = 4, n.adapt = 1000)
 ```
 
-## Burning and check convergence
+## Burn-ins and check for convergence
 
 ```{r, message=FALSE, warning=FALSE}
 update(m1, 1024000)
 ```
-
-## Posterior samples
 
 ```{r, message=FALSE, warning=FALSE}
 x1 <- coda.samples(m1,c('beta.Year','Player.Effect'), n.iter = 40000)
@@ -335,11 +332,17 @@ x1 <- coda.samples(m1,c('beta.Year','Player.Effect'), n.iter = 40000)
 gelman.diag(x1, autoburnin = F)
 ```
 
-## Effective samples sizes are adequate.
+```{r, message=FALSE, warning=FALSE}
+gelman.plot(x1, autoburnin = F)
+```
+
+## Effective sample sizes
 
 ```{r, message=FALSE, warning=FALSE}
-effectiveSize(x1)
+effSizes <- effectiveSize(x1)
 ```
+
+Are all effective sizes above 400? `r all(effSizes > 400)`
 
 ## Retrieve replicate dataset and probabilities
 
@@ -349,6 +352,11 @@ x1 <- coda.samples(m1, c('beta.Year','Player.Effect','prob','FGMrep'), n.iter = 
 
 # Model Assessment 
 
+## Coda Summary
+
+```{r}
+summary(x1)
+```
 ## Check overdispersion, chi-square discrepancy
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
@@ -484,34 +492,24 @@ df_posterior_observed
 plot_player_posterior_probs(model_data, player_row_id, posterior)
 ```
 
-## Check DeMar DeRozan successfully makes an attempted field goal for the past three years.
-
-```{r, echo=FALSE, message=FALSE, warning=FALSE}
-player_row_id <- which(model_data$Player == "DeMar DeRozan")
-posterior <- get_player_posterior_probs(df, model_data, player_row_id)
-df_posterior_observed <- get_player_posterior_vs_observed(model_data, player_row_id, posterior)
-df_posterior_observed
-```
-
-```{r, message=FALSE, warning=FALSE, fig.height=4, fig.width=10}
-plot_player_posterior_probs(model_data, player_row_id, posterior)
-```
-
-
-## Check Dennis Schroder successfully makes an attempted field goal for the past three years.
-```{r, echo=FALSE, message=FALSE, warning=FALSE}
-player_row_id <- which(model_data$Player == "Dennis Schroder")
-posterior <- get_player_posterior_probs(df, model_data, player_row_id)
-df_posterior_observed <- get_player_posterior_vs_observed(model_data, player_row_id, posterior)
-df_posterior_observed
-```
-
-```{r, message=FALSE, warning=FALSE, fig.height=4, fig.width=10}
-plot_player_posterior_probs(model_data, player_row_id, posterior)
-```
-
 # Contributions
+
+## Xiang Gao
+
+Worked on the project idea, model building and validations.
+
+## Jerome Finn
+
+Worked on the project evaluation, presentation and validations.
+
+## Nilesh Malpekar
+
+Worked on the data preparations, restructuring project report code and validations.
+
 # References
+
+* [NBA players stats since 1950](https://www.kaggle.com/drgilermo/nba-players-stats)
+
 # Appendix
 
 * [NBA Dataset](https://www.kaggle.com/drgilermo/nba-players-stats/downloads/nba-players-stats-since-1950.zip)
