@@ -57,9 +57,9 @@ library(knitr)
 
 ## Background 
 
-As we all know,a point guard controll the court by passing the ball to the player who is wide open. He is a decision maker to deliver assists or finish the attack by himself. The question arises, who has the highest shooting percentage among the top NBA point guards. Is this related to the professional years of experience.
+As we all know,a point guard controll the court by passing the ball to the player who is wide open. He is a decision maker to deliver assists or finish the attack by himself. The question arises, who has the highest shooting percentage among the top NBA point guards. Is this related to the professional years of experience?
 
-We are using logistic regression to assess the probablity of shooting, also use a binomial model to estimate FGM. In order to build a hierachical model, each player is treated as a individual group by introducing a random effect called player effect. What's more, recent three years data will be used to check the continuous improvement.
+We are using logistic regression to assess the probablity of shooting, also use a binomial model to estimate field goals made by the NBA players. In order to build a hierachical model, each player is treated as a individual group by introducing a random effect called player effect. What's more, recent three years data will be used to check the continuous improvement.
 
 # Data
 
@@ -338,23 +338,18 @@ inits1 <- list(list(beta.Year=rep(-1, model_data_row_count), mu=10, sigmaPE=0.00
                list(beta.Year=rep(-1, model_data_row_count), mu=-10, sigmaPE=0.01, .RNG.name = "base::Marsaglia-Multicarry", .RNG.seed = 456))
 ```
 
-
 ## Build model
   
 ```{r, message=FALSE, warning=FALSE}
 m1 <- jags.model('model-logistic.bug', d1, inits = inits1, n.chains = 4, n.adapt = 1000)
 ```
 
-## Burning and check convergence
+## Burn-ins and check for convergence
 
 We tried various values for to speed convergence. None lead to very fast convergence but the above values, after much trial and error, were finally acceptable. Still it took a burn-in of over 1 million iterations to get convergence.
 
 ```{r, message=FALSE, warning=FALSE}
 update(m1, 1024000)
-```
-
-```{r, eval=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
-#update(m1, 1000)
 ```
 
 ## Posterior samples and Gelman Statistic
@@ -364,7 +359,7 @@ x1 <- coda.samples(m1,c('beta.Year','Player.Effect'), n.iter = 40000)
 
 gelman.diag(x1, autoburnin = F)
 ```
-  
+
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 gelman.plot(x1)
 ```
@@ -372,7 +367,7 @@ gelman.plot(x1)
 ## Effective samples sizes are adequate.
 
 ```{r, message=FALSE, warning=FALSE}
-effectiveSize(x1)
+effSizes <- effectiveSize(x1)
 ```
 
 ## Retrieve replicate dataset and probabilities
@@ -383,6 +378,11 @@ x1 <- coda.samples(m1, c('beta.Year','Player.Effect','prob','FGMrep'), n.iter = 
 
 # Model Assessment 
 
+## Coda Summary
+
+```{r}
+summary(x1)
+```
 ## Check overdispersion, chi-square discrepancy
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
@@ -497,7 +497,7 @@ player_row_id <- which(model_data$Player == "Stephen Curry")
 # posterior prob
 posterior <- get_player_posterior_probs(df, model_data, player_row_id)
 df_posterior_observed <- get_player_posterior_vs_observed(model_data, player_row_id, posterior)
-df_posterior_observed
+kable(df_posterior_observed)
 ```
 
 The posterior density does not show Stephen's improvement of making a field goal, let's also check Russell Westbrook.
@@ -513,7 +513,7 @@ player_row_id <- which(model_data$Player == "Bradley Beal")
 # posterior prob
 posterior <- get_player_posterior_probs(df, model_data, player_row_id)
 df_posterior_observed <- get_player_posterior_vs_observed(model_data, player_row_id, posterior)
-df_posterior_observed
+kable(df_posterior_observed)
 ```
 
 ```{r, message=FALSE, warning=FALSE, fig.height=4, fig.width=10}
@@ -526,7 +526,7 @@ Check DeMar DeRozan successfully makes an attempted field goal for the past thre
 player_row_id <- which(model_data$Player == "DeMar DeRozan")
 posterior <- get_player_posterior_probs(df, model_data, player_row_id)
 df_posterior_observed <- get_player_posterior_vs_observed(model_data, player_row_id, posterior)
-df_posterior_observed
+kable(df_posterior_observed)
 ```
 
 ```{r, message=FALSE, warning=FALSE, fig.height=4, fig.width=10}
@@ -539,11 +539,7 @@ Check Dennis Schroder successfully makes an attempted field goal for the past th
 player_row_id <- which(model_data$Player == "Dennis Schroder")
 posterior <- get_player_posterior_probs(df, model_data, player_row_id)
 df_posterior_observed <- get_player_posterior_vs_observed(model_data, player_row_id, posterior)
-df_posterior_observed
-```
-
-```{r, message=FALSE, warning=FALSE, fig.height=4, fig.width=10}
-plot_player_posterior_probs(model_data, player_row_id, posterior)
+kable(df_posterior_observed)
 ```
 
 ## Posterior Odds
@@ -552,8 +548,6 @@ Here we show the posterior odds of each player improving from one year to the ne
 As we can see the odds are not extreme that a player may improve from one year to the next, nor do we have a clear pattern. The model does not support the proposition that players improve from one year to another.   
   
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
-# From Jerry to merge
-library(knitr)
 postodds <- data.frame(matrix(NA, nrow(model_data), ncol=2))
 for (i in 1:nrow(model_data)) {
   post_prob <- get_player_posterior_probs(df, model_data, i)
@@ -562,16 +556,16 @@ for (i in 1:nrow(model_data)) {
 postodds <- cbind(model_data$Player, postodds)
 names(postodds) <- c("Player", "2016-2017", "2015-2016")
 kable(postodds)
-
 ```
-
-
 
 # Contributions
     
 Xiang deserves a bulk of the credit as the idea was his and did the data gathering and model design, as well a first pass at much of the analysis. We all contributed to the final analysis, although Nilesh did much to improve the R coding. Jerry also contributed to the analysis and lead on much of the early work with regards to putting together the proposal and video presenation with the team's input. 
   
 # References
+
+* [NBA players stats since 1950](https://www.kaggle.com/drgilermo/nba-players-stats)
+
 # Appendix
 
 * [NBA Dataset](https://www.kaggle.com/drgilermo/nba-players-stats/downloads/nba-players-stats-since-1950.zip)
